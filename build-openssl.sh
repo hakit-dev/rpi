@@ -23,3 +23,7 @@ url=https://www.openssl.org/source/$tarball
 make -C $srcdir CC="${CROSS}-gcc" AR="${CROSS}-ar r" RANLIB="${CROSS}-ranlib" depend
 make -C $srcdir CC="${CROSS}-gcc" AR="${CROSS}-ar r" RANLIB="${CROSS}-ranlib"
 make -C $srcdir INSTALL_PREFIX="$CROSS_PATH" install_sw
+
+for file in bin/c_rehash bin/openssl lib/pkgconfig ssl; do
+    rm -rf "$CROSS_PATH/$PREFIX/$file"
+done
