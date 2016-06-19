@@ -269,6 +269,8 @@ static int _new(hk_obj_t *obj)
 	memset(ctx, 0, sizeof(ctx_t));
 	ctx->obj = obj;
 	obj->ctx = ctx;
+	ctx->qin = -1;
+	ctx->qout = -1;
 
 	/* Get sensor id */
 	ctx->id = find_id(obj, hk_prop_get(&obj->props, "id"));
@@ -311,6 +313,16 @@ failed:
 	if (ctx->qout_tag != 0) {
 		sys_remove(ctx->qout_tag);
 		ctx->qout_tag = 0;
+	}
+
+	if (ctx->qout >= 0) {
+		mq_close(ctx->qout);
+		ctx->qout = -1;
+	}
+
+	if (ctx->qin >= 0) {
+		mq_close(ctx->qin);
+		ctx->qin = -1;
 	}
 
 	if (ctx->path != NULL) {
