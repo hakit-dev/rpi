@@ -1,0 +1,8 @@
+Package: @NAME@
+Priority: optional
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: HAKit
+Section: hakit
+Depends: hakit
+Description: HAKit class for MCP3008 SPI ADC converter on Raspberry Pi

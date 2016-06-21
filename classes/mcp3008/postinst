@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# Enable SPI in boot configuration
+BOOT_CONFIG=/boot/config.txt
+grep -q "^dtparam=spi=on" $BOOT_CONFIG || {
+    echo -e "\ndtparam=spi=on" >>$BOOT_CONFIG
+    echo "WARNING: Please reboot in order for the Boot Configuration to be taken into account" >&2
+}
