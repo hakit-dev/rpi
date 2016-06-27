@@ -1,9 +1,7 @@
 [objects]
-clock: timer-clock period=10000 enable
+clock: timer-clock period=10000 duty=100 enable
 sensor: mcp3008 channels=0
 led: gpio output=!18
-led_pulse: timer-pulse delay=100
 
 [nets]
-clock.out sensor.trig0 led_pulse.in
-led_pulse.out led.in
+clock.out sensor.trig0 led.in
