@@ -12,7 +12,7 @@ BIN = $(OUTDIR)/$(NAME).so
 
 INSTALL_DIR = $(DESTDIR)/usr/lib/hakit/classes/$(NAME)/device
 
-LDFLAGS += -lpthread -lrt
+SOFLAGS += -lpthread -lrt
 
 all:: $(BIN)
 
