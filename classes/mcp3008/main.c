@@ -212,7 +212,7 @@ static int _new(hk_obj_t *obj)
 	}
 
 	/* Set debug/error message header */
-	size = strlen(CLASS_NAME) + strlen(id) + 8;
+	size = strlen(CLASS_NAME) + strlen(ctx->obj->name) + 8;
 	ctx->hdr = malloc(size);
 	snprintf(ctx->hdr, size, CLASS_NAME "(%s): ", ctx->obj->name);
 
