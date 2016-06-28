@@ -1,5 +1,5 @@
 [objects]
-clock: timer-clock period=10000 duty=100 enable
+clock: timer-clock period=10000 duty=100 enable=1
 sensor: mcp3008 channels=0
 led: gpio output=!18
 
