@@ -1,0 +1,7 @@
+[objects]
+clock: timer-clock period=10000 duty=100 enable=1
+temp: ds18b20
+led: gpio output=!18
+
+[nets]
+clock.out temp.trig led.in
