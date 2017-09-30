@@ -208,8 +208,10 @@ static int qout_recv(ctx_t *ctx, int fd)
 
 	if (msize == sizeof(int)) {
 		int *pvalue = (int *) mbuf;
-		ctx->out->state = *pvalue;
-		hk_pad_update_int(ctx->out, ctx->out->state);
+		int value100 = *pvalue / 100;
+		char str[20];
+		snprintf(str, sizeof(str), "%d.%d", value100/10, value100%10);
+		hk_pad_update_str(ctx->out, str);
 	}
 	else {
 		log_str("PANIC: " CLASS_NAME "(%s): Illegal data received from output queue (%d bytes)", ctx->obj->name, msize);

@@ -1,7 +1,11 @@
-[objects]
-clock: timer-clock period=10000 duty=100 enable=1
-temp: ds18b20
-led: gpio output=!18
+clock: timer-clock
+  period=10000 duty=100 enable=1
+led: gpio
+  output=!18
+  in=$clock.out
 
-[nets]
-clock.out temp.trig led.in
+temp: ds18b20
+  trig=$clock.out
+meter: source local
+  widget=meter:min=-20,low=0,high=50,max=60
+  in=$temp.out
