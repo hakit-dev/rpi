@@ -210,7 +210,13 @@ static int qout_recv(ctx_t *ctx, int fd)
 		int *pvalue = (int *) mbuf;
 		int value100 = *pvalue / 100;
 		char str[20];
-		snprintf(str, sizeof(str), "%d.%d", value100/10, value100%10);
+                if (value100 >= 0) {
+                        snprintf(str, sizeof(str), "%d.%d", value100/10, value100%10);
+                }
+                else {
+                        value100 = (-value100);
+                        snprintf(str, sizeof(str), "-%d.%d", value100/10, value100%10);
+                }
 		hk_pad_update_str(ctx->out, str);
 	}
 	else {
