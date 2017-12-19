@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# Enable 1wire in boot configuration
+BOOT_CONFIG=/boot/config.txt
+grep -q "^dtparam=i2c_arm=on" $BOOT_CONFIG || {
+    echo -e "\ndtparam=i2c_arm=on" >>$BOOT_CONFIG
+    echo -e "\ndtparam=i2c1=on" >>$BOOT_CONFIG
+    echo "WARNING: Please reboot in order for the Boot Configuration to be taken into account" >&2
+}
