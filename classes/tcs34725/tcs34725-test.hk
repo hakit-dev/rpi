@@ -1,0 +1,30 @@
+led: sink local
+led_out: gpio
+  output=17
+  in=$led.out
+
+gain: sink local
+  widget=select:1,4,16,60
+atime: sink local
+  widget=select:2.4,24,50,101,154,700
+
+clock: timer-clock
+  period=2000
+  duty=100
+  enable=1
+sensor: tcs34725
+  trig=$clock.out
+  atime=$atime.out
+  gain=$gain.out
+c: source local
+  widget=meter:min=0,low=0,high=65536,max=65536
+  in=$sensor.c
+r: source local
+  widget=meter:min=0,low=0,high=65536,max=65536
+  in=$sensor.r
+g: source local
+  widget=meter:min=0,low=0,high=65536,max=65536
+  in=$sensor.g
+b: source local
+  widget=meter:min=0,low=0,high=65536,max=65536
+  in=$sensor.b
