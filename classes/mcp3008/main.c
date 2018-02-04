@@ -45,6 +45,8 @@ typedef struct {
 	sys_tag_t qout_tag;
 	hk_pad_t *trig[NCHANS];
 	hk_pad_t *out[NCHANS];
+        int period;
+	sys_tag_t period_tag;
 } ctx_t;
 
 
@@ -143,7 +145,11 @@ static int qout_recv(ctx_t *ctx, int fd)
 	if (msize == sizeof(msg_t)) {
 		msg_t *msg = (msg_t *) mbuf;
 		if (msg->chan < NCHANS) {
-			hk_pad_update_int(ctx->out[msg->chan], msg->value);
+                        hk_pad_t *out = ctx->out[msg->chan];
+                        if (msg->value != out->state) {
+                                out->state = msg->value;
+                                hk_pad_update_int(out, msg->value);
+                        }
 		}
 		else {
 			log_str("PANIC: %sIllegal channel number received from output queue (%u)", ctx->hdr, msg->chan);
@@ -189,6 +195,33 @@ static int create_queue(ctx_t *ctx, char *name, int flags)
 }
 
 
+static int trigger(ctx_t *ctx, unsigned int chan)
+{
+	if (mq_send(ctx->qin, (char *) &chan, sizeof(chan), 0) < 0) {
+		log_str("PANIC: %sCannot write input queue: %s", ctx->hdr, strerror(errno));
+                return 0;
+	}
+
+	return 1;
+}
+
+
+static int trigger_all(ctx_t *ctx)
+{
+        int chan;
+
+        for (chan = 0; chan < NCHANS; chan++) {
+                if (ctx->trig[chan] != NULL) {
+                        if (!trigger(ctx, chan)) {
+                                return 0;
+                        }
+                }
+        }
+
+	return 1;
+}
+
+
 static int _new(hk_obj_t *obj)
 {
 	ctx_t *ctx;
@@ -216,6 +249,9 @@ static int _new(hk_obj_t *obj)
 	ctx->hdr = malloc(size);
 	snprintf(ctx->hdr, size, CLASS_NAME "(%s): ", ctx->obj->name);
 
+        /* Get period property */
+	ctx->period = hk_prop_get_int(&obj->props, "period");
+
 	/* Get list of channels */
 	str = hk_prop_get(&obj->props, "channels");
 	if (str == NULL) {
@@ -239,7 +275,7 @@ static int _new(hk_obj_t *obj)
 
 			snprintf(buf, sizeof(buf), "out%u", chan);
 			ctx->out[chan] = hk_pad_create(obj, HK_PAD_IN, buf);
-			ctx->trig[chan]->state = chan;
+			ctx->out[chan]->state = 0x7FFFFFFF; // Unrealistic value to ensure value will be updated at first trigger
 		}
 
 		str = end;
@@ -303,18 +339,25 @@ failed:
 }
 
 
+static void _start(hk_obj_t *obj)
+{
+	ctx_t *ctx = obj->ctx;
+
+        trigger_all(ctx);
+
+        if (ctx->period > 0) {
+		ctx->period_tag = sys_timeout(ctx->period, (sys_func_t) trigger_all, ctx);
+        }
+}
+
+
 static void _input(hk_pad_t *pad, char *value)
 {
 	ctx_t *ctx = pad->obj->ctx;
-	unsigned int chan = pad->state;
 
 	/* Ignore falling edge */
-	if (value[0] == '0') {
-		return;
-	}
-
-	if (mq_send(ctx->qin, (char *) &chan, sizeof(chan), 0) < 0) {
-		log_str("PANIC: %sCannot write input queue: %s", ctx->hdr, strerror(errno));
+	if (value[0] != '0') {
+                trigger(ctx, pad->state);
 	}
 }
 
@@ -323,5 +366,6 @@ hk_class_t _class = {
 	.name = CLASS_NAME,
 	.version = VERSION,
 	.new = _new,
+	.start = _start,
 	.input = _input,
 };

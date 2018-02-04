@@ -23,6 +23,7 @@
 #include "log.h"
 #include "mod.h"
 #include "sys.h"
+#include "prop.h"
 
 #include "version.h"
 
@@ -43,6 +44,8 @@ typedef struct {
 	sys_tag_t qout_tag;
 	hk_pad_t *trig;
 	hk_pad_t *out;
+        int period;
+	sys_tag_t period_tag;
 } ctx_t;
 
 
@@ -209,15 +212,21 @@ static int qout_recv(ctx_t *ctx, int fd)
 	if (msize == sizeof(int)) {
 		int *pvalue = (int *) mbuf;
 		int value100 = *pvalue / 100;
-		char str[20];
-                if (value100 >= 0) {
-                        snprintf(str, sizeof(str), "%d.%d", value100/10, value100%10);
+
+                if (value100 != ctx->out->state) {
+                        char str[20];
+
+                        ctx->out->state = value100;
+
+                        if (value100 >= 0) {
+                                snprintf(str, sizeof(str), "%d.%d", value100/10, value100%10);
+                        }
+                        else {
+                                value100 = (-value100);
+                                snprintf(str, sizeof(str), "-%d.%d", value100/10, value100%10);
+                        }
+                        hk_pad_update_str(ctx->out, str);
                 }
-                else {
-                        value100 = (-value100);
-                        snprintf(str, sizeof(str), "-%d.%d", value100/10, value100%10);
-                }
-		hk_pad_update_str(ctx->out, str);
 	}
 	else {
 		log_str("PANIC: " CLASS_NAME "(%s): Illegal data received from output queue (%d bytes)", ctx->obj->name, msize);
@@ -259,6 +268,18 @@ static int create_queue(ctx_t *ctx, char *name, int flags)
 }
 
 
+static int trigger(ctx_t *ctx)
+{
+	char req = 0;
+	if (mq_send(ctx->qin, &req, sizeof(req), 0) < 0) {
+		log_str("PANIC: " CLASS_NAME "(%s): Cannot write input queue: %s", ctx->obj->name, strerror(errno));
+                return 0;
+	}
+
+	return 1;
+}
+
+
 static int _new(hk_obj_t *obj)
 {
 	ctx_t *ctx;
@@ -286,14 +307,20 @@ static int _new(hk_obj_t *obj)
 		goto failed;
 	}
 
+        /* Get period property */
+	ctx->period = hk_prop_get_int(&obj->props, "period");
+
 	/* Setup sensor data path */
 	size = strlen(SYS_W1_DIR) + strlen(ctx->id) + 16;
 	ctx->path = malloc(size);
 	snprintf(ctx->path, size, SYS_W1_DIR "/%s/w1_slave", ctx->id);
 
-	/* Create output pad */
+	/* Create trigger input pad */
 	ctx->trig = hk_pad_create(obj, HK_PAD_IN, "trig");
+
+	/* Create output pad */
 	ctx->out = hk_pad_create(obj, HK_PAD_IN, "out");
+        ctx->out->state = 0x7FFFFFFF;  // Unrealistic value to ensure value will be updated at first trigger
 
 	/* Create input request queue */
 	ctx->qin = create_queue(ctx, "in", 0);
@@ -351,18 +378,25 @@ failed:
 }
 
 
+static void _start(hk_obj_t *obj)
+{
+	ctx_t *ctx = obj->ctx;
+
+        trigger(ctx);
+
+        if (ctx->period > 0) {
+		ctx->period_tag = sys_timeout(ctx->period, (sys_func_t) trigger, ctx);
+        }
+}
+
+
 static void _input(hk_pad_t *pad, char *value)
 {
 	ctx_t *ctx = pad->obj->ctx;
 
 	/* Ignore falling edge */
-	if (value[0] == '0') {
-		return;
-	}
-
-	char req = 0;
-	if (mq_send(ctx->qin, &req, sizeof(req), 0) < 0) {
-		log_str("PANIC: " CLASS_NAME "(%s): Cannot write input queue: %s", ctx->obj->name, strerror(errno));
+	if (value[0] != '0') {
+                trigger(ctx);
 	}
 }
 
@@ -371,5 +405,6 @@ hk_class_t _class = {
 	.name = CLASS_NAME,
 	.version = VERSION,
 	.new = _new,
+	.start = _start,
 	.input = _input,
 };
