@@ -112,24 +112,20 @@ void spidev_close(spidev_t *spidev)
 
 int spidev_write_read(spidev_t *spidev, unsigned char *buf, int size)
 {
-	struct spi_ioc_transfer spi[size];
-	int i;
+	struct spi_ioc_transfer spi = {
+                .tx_buf = (unsigned long) buf,
+                .rx_buf = (unsigned long) buf,
+                .len = size,
+                .delay_usecs = 0,
+                .speed_hz = spidev->speed_hz,
+                .bits_per_word = spidev->bits_per_word,
+                .cs_change = 0,
+        };
 	int ret;
 
 	log_debug(2, "%sspidev_write_read fd=%d size=%d", spidev->hdr, spidev->fd, size);
 
-	for (i = 0; i < size; i++) {
-		memset(&spi[i], 0, sizeof(spi[i]));
-		spi[i].tx_buf = (unsigned long) (buf + i);
-		spi[i].rx_buf = (unsigned long) (buf + i);
-		spi[i].len = 1;
-		spi[i].delay_usecs = 0;
-		spi[i].speed_hz = spidev->speed_hz;
-		spi[i].bits_per_word = spidev->bits_per_word;
-		spi[i].cs_change = 0;
-	}
-
-	ret = ioctl(spidev->fd, SPI_IOC_MESSAGE(size), spi);
+	ret = ioctl(spidev->fd, SPI_IOC_MESSAGE(1), &spi);
 	if (ret < 0) {
 		log_str("ERROR: %sSPI transfer error: %s", spidev->hdr, strerror(errno));
 	}
