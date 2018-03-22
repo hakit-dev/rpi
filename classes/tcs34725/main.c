@@ -43,6 +43,8 @@ typedef struct {
 	hk_pad_t *r;
 	hk_pad_t *g;
 	hk_pad_t *b;
+        int period;
+	sys_tag_t period_tag;
 } ctx_t;
 
 
@@ -88,6 +90,7 @@ static int tcs34725_enable(i2cdev_t *i2cdev)
 }
 
 
+#if 0
 static int tcs34725_disable(i2cdev_t *i2cdev)
 {
         uint8_t reg = 0;
@@ -104,6 +107,7 @@ static int tcs34725_disable(i2cdev_t *i2cdev)
 
         return 0;
 }
+#endif
 
 
 static int tcs34725_set_integration_time(i2cdev_t *i2cdev, uint8_t atime)
@@ -183,6 +187,9 @@ static int _new(hk_obj_t *obj)
 		num = DEFAULT_I2C_NUM;
 	}
 
+        /* Get period property */
+	ctx->period = hk_prop_get_int(&obj->props, "period");
+
 	/* Open I2C device */
 	if (i2cdev_open(&ctx->i2cdev, num, TCS34725_ADDR) < 0) {
 		goto failed;
@@ -225,30 +232,30 @@ failed:
 }
 
 
-static void input_trig(ctx_t *ctx, int v)
+static int input_trig(ctx_t *ctx)
 {
-        if (v != 0) {
-                /* Read value */
-                uint16_t crgb[4];
-                tcs34725_get_raw_data(&ctx->i2cdev, crgb);
+        /* Read value */
+        uint16_t crgb[4];
+        tcs34725_get_raw_data(&ctx->i2cdev, crgb);
 
-                if (crgb[0] != ctx->c->state) {
-                        ctx->c->state = crgb[0];
-                        hk_pad_update_int(ctx->c, ctx->c->state);
-                }
-                if (crgb[1] != ctx->r->state) {
-                        ctx->r->state = crgb[1];
-                        hk_pad_update_int(ctx->r, ctx->r->state);
-                }
-                if (crgb[2] != ctx->g->state) {
-                        ctx->g->state = crgb[2];
-                        hk_pad_update_int(ctx->g, ctx->g->state);
-                }
-                if (crgb[3] != ctx->b->state) {
-                        ctx->b->state = crgb[3];
-                        hk_pad_update_int(ctx->b, ctx->b->state);
-                }
+        if (crgb[0] != ctx->c->state) {
+                ctx->c->state = crgb[0];
+                hk_pad_update_int(ctx->c, ctx->c->state);
         }
+        if (crgb[1] != ctx->r->state) {
+                ctx->r->state = crgb[1];
+                hk_pad_update_int(ctx->r, ctx->r->state);
+        }
+        if (crgb[2] != ctx->g->state) {
+                ctx->g->state = crgb[2];
+                hk_pad_update_int(ctx->g, ctx->g->state);
+        }
+        if (crgb[3] != ctx->b->state) {
+                ctx->b->state = crgb[3];
+                hk_pad_update_int(ctx->b, ctx->b->state);
+        }
+
+        return 1;
 }
 
 
@@ -300,6 +307,20 @@ static void input_gain(ctx_t *ctx, int v)
 }
 
 
+static void _start(hk_obj_t *obj)
+{
+	ctx_t *ctx = obj->ctx;
+
+        if (ctx != NULL) {
+                input_trig(ctx);
+
+                if (ctx->period > 0) {
+                        ctx->period_tag = sys_timeout(ctx->period, (sys_func_t) input_trig, ctx);
+                }
+        }
+}
+
+
 static void _input(hk_pad_t *pad, char *value)
 {
 	ctx_t *ctx = pad->obj->ctx;
@@ -308,7 +329,9 @@ static void _input(hk_pad_t *pad, char *value)
         log_debug(2, "%s_input %s='%s'=%d", ctx->hdr, pad->name, value, v);
 
         if (pad == ctx->trig) {
-                input_trig(ctx, v);
+                if (v != 0) {
+                        input_trig(ctx);
+                }
         }
         else if (pad == ctx->atime) {
                 input_atime(ctx, v);
@@ -323,5 +346,6 @@ hk_class_t _class = {
 	.name = CLASS_NAME,
 	.version = VERSION,
 	.new = _new,
+	.start = _start,
 	.input = _input,
 };
