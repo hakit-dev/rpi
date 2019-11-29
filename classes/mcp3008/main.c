@@ -43,6 +43,7 @@ typedef struct {
 	mqd_t qin;
 	mqd_t qout;
 	sys_tag_t qout_tag;
+	unsigned char cfg[NCHANS];
 	hk_pad_t *trig[NCHANS];
 	hk_pad_t *out[NCHANS];
         int period;
@@ -56,18 +57,18 @@ typedef struct {
 } msg_t;
 
 
-static int read_value(ctx_t *ctx, unsigned int chan)
+static int read_value(ctx_t *ctx, unsigned char cfg)
 {
 	int value = -1;
 	int size;
 
 	unsigned char buf[3] = {
 		0x01,                     // 1st byte transmitted -> start bit
-		0x80 | ((chan & 7) << 4), // 2nd byte transmitted -> (SGL/DIF = 1, D2=D1=D0=0)
+		cfg,                      // 2nd byte transmitted -> (SGL/DIF = 1, D2=D1=D0=0)
 		0x00,                     // 3rd byte transmitted....don't care
 	};
 
-	log_debug(2, "%sread_value chan=%u", ctx->hdr, chan);
+	log_debug(2, "%sread_value diff=%u chan=%u", ctx->hdr, (cfg >> 7) & 1, (cfg >> 4) & 0x7);
 	log_debug(2, "%sSPI write %02X %02X %02X", ctx->hdr, buf[0], buf[1], buf[2]);
 
 	size = spidev_write_read(&ctx->spidev, buf, sizeof(buf));
@@ -88,7 +89,6 @@ static void *qin_recv_loop(void *_ctx)
 	while (ret == 0) {
 		char mbuf[MSG_MAXSIZE];
 		ssize_t msize;
-		unsigned int chan;
 
 		msize = mq_receive(ctx->qin, mbuf, sizeof(mbuf), NULL);
 		if (msize < 0) {
@@ -99,14 +99,14 @@ static void *qin_recv_loop(void *_ctx)
 
 		log_debug(2, "%sqin_recv_loop -> %d", ctx->hdr, msize);
 
-		if (msize == sizeof(chan)) {
+		if (msize == sizeof(unsigned int)) {
 			unsigned int *pchan = (unsigned int *) mbuf;
+                        unsigned int chan = *pchan;
 
-			chan = *pchan;
 			if (chan < NCHANS) {
 				msg_t msg = {
 					.chan = chan,
-					.value = read_value(ctx, chan),
+					.value = read_value(ctx, ctx->cfg[chan]),
 				};
 				if (mq_send(ctx->qout, (char *) &msg, sizeof(msg), 0) < 0) {
 					log_str("PANIC: %sCannot write output queue: %s", ctx->hdr, strerror(errno));
@@ -265,9 +265,17 @@ static int _new(hk_obj_t *obj)
 			*(end++) = '\0';
 		}
 
+                unsigned char diff = 0x80;
+                if (*str == '*') {
+                        str++;
+                        diff = 0x00;
+                }
+
 		unsigned int chan = strtoul(str, NULL, 0);
 		if (chan < NCHANS) {
 			char buf[16];
+
+                        ctx->cfg[chan] = (diff | (chan & 0x07)) << 4;
 
 			snprintf(buf, sizeof(buf), "trig%u", chan);
 			ctx->trig[chan] = hk_pad_create(obj, HK_PAD_IN, buf);
