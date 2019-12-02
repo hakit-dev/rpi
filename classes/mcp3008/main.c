@@ -275,7 +275,7 @@ static int _new(hk_obj_t *obj)
 		if (chan < NCHANS) {
 			char buf[16];
 
-                        ctx->cfg[chan] = (diff | (chan & 0x07)) << 4;
+                        ctx->cfg[chan] = diff | ((chan & 0x07) << 4);
 
 			snprintf(buf, sizeof(buf), "trig%u", chan);
 			ctx->trig[chan] = hk_pad_create(obj, HK_PAD_IN, buf);
