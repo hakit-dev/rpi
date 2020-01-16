@@ -47,6 +47,7 @@ typedef struct {
 	hk_pad_t *trig[NCHANS];
 	hk_pad_t *out[NCHANS];
         int period;
+        int mean;
 	sys_tag_t period_tag;
 } ctx_t;
 
@@ -104,10 +105,29 @@ static void *qin_recv_loop(void *_ctx)
                         unsigned int chan = *pchan;
 
 			if (chan < NCHANS) {
+                                int acc = 0;
+                                int count = 0;
+                                int i;
+
+                                for (i = 0; i < ctx->mean; i++) {
+                                        int value = read_value(ctx, ctx->cfg[chan]);
+                                        if (value < 0) {
+                                                break;
+                                        }
+
+                                        acc += value;
+                                        count++;
+                                }
+
+                                if (count > 1) {
+                                        acc /= count;
+                                }
+
 				msg_t msg = {
 					.chan = chan,
-					.value = read_value(ctx, ctx->cfg[chan]),
+					.value = acc,
 				};
+
 				if (mq_send(ctx->qout, (char *) &msg, sizeof(msg), 0) < 0) {
 					log_str("PANIC: %sCannot write output queue: %s", ctx->hdr, strerror(errno));
 					ret = -1;
@@ -257,6 +277,12 @@ static int _new(hk_obj_t *obj)
 	if (str == NULL) {
 		goto failed;
 	}
+
+        /* Get sampling mean size property */
+	ctx->mean = hk_prop_get_int(&obj->props, "mean");
+        if (ctx->mean <= 0) {
+                ctx->mean = 1;
+        }
 
 	/* Create trigger and output pads for each channel */
 	while (str != NULL) {
