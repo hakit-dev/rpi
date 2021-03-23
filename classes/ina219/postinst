@@ -1,0 +1,23 @@
+#!/bin/sh
+
+unset REBOOT
+
+# Enable I2C interface in boot configuration
+BOOT_CONFIG=/boot/config.txt
+grep -q "^dtparam=i2c_arm=on" $BOOT_CONFIG || {
+    sed -i 's|#dtparam=i2c_arm=on$|dtparam=i2c_arm=on|' $BOOT_CONFIG
+    REBOOT=yes
+}
+grep -q "^dtparam=i2c_arm=on" $BOOT_CONFIG || {
+    echo -e "\ndtparam=i2c_arm=on" >>$BOOT_CONFIG
+    REBOOT=yes
+}
+
+# Enable on-boot i2c-dev driver module
+MODULES=/etc/modules-load.d/modules.conf
+grep -q "^i2c-dev" $MODULES || {
+    echo -e "\ni2c-dev" >>$MODULES
+    REBOOT=yes
+}
+
+[ -n "$REBOOT" ] && echo "WARNING: Please reboot in order for the Boot Configuration to be taken into account" >&2
