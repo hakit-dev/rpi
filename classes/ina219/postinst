@@ -21,3 +21,5 @@ grep -q "^i2c-dev" $MODULES || {
 }
 
 [ -n "$REBOOT" ] && echo "WARNING: Please reboot in order for the Boot Configuration to be taken into account" >&2
+
+exit 0
