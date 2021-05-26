@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <malloc.h>
 #include <errno.h>
@@ -264,18 +265,34 @@ failed:
 }
 
 
-static int input_trig(ctx_t *ctx)
+static int input_trig(ctx_t *ctx, bool refresh)
 {
         /* Read value */
         int voltage = ina219_read_voltage(ctx);
-        if (voltage >= 0) {
+        if (refresh || (voltage != ctx->voltage->state)) {
+                ctx->voltage->state = voltage;
                 hk_pad_update_int(ctx->voltage, voltage);
         }
 
         int current = ina219_read_current(ctx);
-        hk_pad_update_int(ctx->current, current);
+        if (refresh || (current != ctx->current->state)) {
+                ctx->current->state = current;
+                hk_pad_update_int(ctx->current, current);
+        }
 
         return 1;
+}
+
+
+static int input_trig_periodic(ctx_t *ctx)
+{
+        return input_trig(ctx, false);
+}
+
+
+static int input_trig_async(ctx_t *ctx)
+{
+        return input_trig(ctx, true);
 }
 
 
@@ -284,10 +301,10 @@ static void _start(hk_obj_t *obj)
 	ctx_t *ctx = obj->ctx;
 
         if (ctx != NULL) {
-                input_trig(ctx);
+                input_trig_async(ctx);
 
                 if (ctx->period > 0) {
-                        ctx->period_tag = sys_timeout(ctx->period, (sys_func_t) input_trig, ctx);
+                        ctx->period_tag = sys_timeout(ctx->period, (sys_func_t) input_trig_periodic, ctx);
                 }
         }
 }
@@ -302,7 +319,7 @@ static void _input(hk_pad_t *pad, char *value)
 
         if (pad == ctx->trig) {
                 if (v != 0) {
-                        input_trig(ctx);
+                        input_trig_async(ctx);
                 }
         }
 }
