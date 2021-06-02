@@ -52,7 +52,7 @@ static int ina219_read_u16(i2cdev_t *i2cdev, uint8_t addr, uint16_t *pvalue)
                 return -1;
         }
 
-        log_debug(2, "%sina219_read(0x%02X) => 0x%02X%02X", i2cdev->hdr, addr, buf[0], buf[1]);
+        log_debug(3, "%sina219_read(0x%02X) => 0x%02X%02X", i2cdev->hdr, addr, buf[0], buf[1]);
 
         if (pvalue != NULL) {
                 *pvalue = (((uint16_t) buf[0]) << 8) + buf[1];
@@ -66,7 +66,7 @@ static int ina219_write_u16(i2cdev_t *i2cdev, uint8_t addr, uint16_t value)
 {
         uint8_t buf[2] = { (value >> 8) & 0xFF, value & 0xFF};
 
-        log_debug(2, "%sina219_write(0x%02X) => 0x%02X%02X", i2cdev->hdr, addr, buf[0], buf[1]);
+        log_debug(3, "%sina219_write(0x%02X) => 0x%02X%02X", i2cdev->hdr, addr, buf[0], buf[1]);
 
         if (i2cdev_write(i2cdev, INA219_COMMAND_BIT|addr, sizeof(buf), buf) < 0) {
                 return -1;
@@ -260,7 +260,6 @@ failed:
 	free(ctx);
 
 	obj->ctx = NULL;
-
 	return -1;
 }
 
@@ -299,13 +298,14 @@ static int input_trig_async(ctx_t *ctx)
 static void _start(hk_obj_t *obj)
 {
 	ctx_t *ctx = obj->ctx;
+        if (ctx == NULL) {
+                return;
+        }
 
-        if (ctx != NULL) {
-                input_trig_async(ctx);
+        input_trig_async(ctx);
 
-                if (ctx->period > 0) {
-                        ctx->period_tag = sys_timeout(ctx->period, (sys_func_t) input_trig_periodic, ctx);
-                }
+        if (ctx->period > 0) {
+                ctx->period_tag = sys_timeout(ctx->period, (sys_func_t) input_trig_periodic, ctx);
         }
 }
 
@@ -313,6 +313,10 @@ static void _start(hk_obj_t *obj)
 static void _input(hk_pad_t *pad, char *value)
 {
 	ctx_t *ctx = pad->obj->ctx;
+        if (ctx == NULL) {
+                return;
+        }
+
         int v = atoi(value);
 
         log_debug(2, "%s_input %s='%s'=%d", ctx->hdr, pad->name, value, v);
