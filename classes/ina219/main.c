@@ -14,10 +14,6 @@
 #include <stdbool.h>
 #include <string.h>
 #include <malloc.h>
-#include <errno.h>
-#include <unistd.h>
-#include <pthread.h>
-#include <mqueue.h>
 
 #include "log.h"
 #include "mod.h"
@@ -154,7 +150,7 @@ static int _new(hk_obj_t *obj)
 	}
         log_str("%sI2C: bus=%d addr=0x%02X", ctx->hdr, bus, addr);
 
-        /* Get trigger period property */
+        /* Get scaling properties */
 	char *scale = hk_prop_get(&obj->props, "scale");
         if (scale == NULL) {
                 scale = "32V_2A";
@@ -175,6 +171,7 @@ static int _new(hk_obj_t *obj)
         }
         log_str("%sscale = %s", ctx->hdr, scale);
 
+        /* Get resolution properties */
 	int res = hk_prop_get_int(&obj->props, "res");
         if (res >= 128) {
                 res = 128;
@@ -267,16 +264,20 @@ failed:
 static int input_trig(ctx_t *ctx, bool refresh)
 {
         /* Read value */
-        int voltage = ina219_read_voltage(ctx);
-        if (refresh || (voltage != ctx->voltage->state)) {
-                ctx->voltage->state = voltage;
-                hk_pad_update_int(ctx->voltage, voltage);
+        if (hk_pad_is_connected(ctx->voltage)) {
+                int voltage = ina219_read_voltage(ctx);
+                if (refresh || (voltage != ctx->voltage->state)) {
+                        ctx->voltage->state = voltage;
+                        hk_pad_update_int(ctx->voltage, voltage);
+                }
         }
 
-        int current = ina219_read_current(ctx);
-        if (refresh || (current != ctx->current->state)) {
-                ctx->current->state = current;
-                hk_pad_update_int(ctx->current, current);
+        if (hk_pad_is_connected(ctx->current)) {
+                int current = ina219_read_current(ctx);
+                if (refresh || (current != ctx->current->state)) {
+                        ctx->current->state = current;
+                        hk_pad_update_int(ctx->current, current);
+                }
         }
 
         return 1;
@@ -305,6 +306,9 @@ static void _start(hk_obj_t *obj)
         input_trig_async(ctx);
 
         if (ctx->period > 0) {
+                if (ctx->period_tag != 0) {
+                        sys_remove(ctx->period_tag);
+                }
                 ctx->period_tag = sys_timeout(ctx->period, (sys_func_t) input_trig_periodic, ctx);
         }
 }
