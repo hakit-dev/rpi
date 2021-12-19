@@ -1,0 +1,8 @@
+[Unit]
+Description=Probe DS248x I2C-1wire interface device
+
+[Service]
+ExecStart=/sbin/ds2482-probe
+
+[Install]
+WantedBy=default.target

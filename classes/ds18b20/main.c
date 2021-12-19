@@ -287,11 +287,8 @@ static int _new(hk_obj_t *obj)
 
 	/* Load device drivers */
 	if (access(SYS_W1_DIR, R_OK) != 0) {
-		int status = system("modprobe w1-gpio w1-therm");
-		if (status != 0) {
-			log_str("ERROR: " CLASS_NAME "(%s): Failed to init 1-wire device driver: %s", obj->name, strerror(errno));
-			return -1;
-		}
+                log_str("ERROR: " CLASS_NAME "(%s): 1-wire bus not available", obj->name);
+                return -1;
 	}
 
 	ctx = malloc(sizeof(ctx_t));

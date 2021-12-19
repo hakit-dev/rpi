@@ -1,8 +1,14 @@
 #!/bin/sh
 
+unset REBOOT
+
 # Enable 1wire in boot configuration
 BOOT_CONFIG=/boot/config.txt
 grep -q "^dtoverlay=w1-gpio" $BOOT_CONFIG || {
     echo -e "\ndtoverlay=w1-gpio" >>$BOOT_CONFIG
-    echo "WARNING: Please reboot in order for the Boot Configuration to be taken into account" >&2
+    REBOOT=yes
 }
+
+[ -n "$REBOOT" ] && echo "WARNING: Please reboot in order for the Boot Configuration to be taken into account" >&2
+
+exit 0

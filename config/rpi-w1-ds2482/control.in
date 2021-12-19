@@ -1,0 +1,7 @@
+Package: @NAME@
+Version: @VERSION@
+Priority: optional
+Architecture: @ARCH@
+Maintainer: Sylvain Giroudon
+Section: utils
+Description: RPi configuration meta-package for setting up 1-Wire bus using DS2482/DS2484 i2c chip

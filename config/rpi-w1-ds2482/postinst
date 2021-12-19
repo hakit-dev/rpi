@@ -1,0 +1,35 @@
+#!/bin/sh
+
+unset REBOOT
+
+# Enable I2C interface in boot configuration
+BOOT_CONFIG=/boot/config.txt
+grep -q "^dtparam=i2c_arm=on" $BOOT_CONFIG || {
+    sed -i 's|#dtparam=i2c_arm=on$|dtparam=i2c_arm=on|' $BOOT_CONFIG
+    REBOOT=yes
+}
+grep -q "^dtparam=i2c_arm=on" $BOOT_CONFIG || {
+    echo -e "\ndtparam=i2c_arm=on" >>$BOOT_CONFIG
+    REBOOT=yes
+}
+
+# Add DS2482 driver to module list
+MODULES=/etc/modules
+grep -q "^i2c-dev" $MODULES || {
+    echo "i2c-dev" >>$MODULES
+    REBOOT=yes
+}
+grep -q "^ds2482" $MODULES || {
+    echo "ds2482" >>$MODULES
+    REBOOT=yes
+}
+
+systemctl enable ds2482-probe
+
+if [ -n "$REBOOT" ]; then
+    echo "WARNING: Please reboot in order for the Boot Configuration to be taken into account" >&2
+else
+    systemctl start ds2482-probe
+fi
+
+exit 0
