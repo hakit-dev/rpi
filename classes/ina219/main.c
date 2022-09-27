@@ -213,7 +213,7 @@ static int _new(hk_obj_t *obj)
                 ina219_set_badc_res(&ctx->chip, INA219_CONFIG_ADCRES_12BIT_1S);
                 ina219_set_sadc_res(&ctx->chip, INA219_CONFIG_ADCRES_12BIT_1S);
         }
-        log_str("%sADC resolution: %d samples", ctx->hdr, res);
+        log_str("%sADC resolution: %.03f mA/bit, %d samples", ctx->hdr, ctx->chip->current_lsb, res);
 
         /* Get trigger period property */
 	ctx->period = hk_prop_get_int(&obj->props, "period");
