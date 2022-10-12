@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <malloc.h>
 #include <errno.h>
@@ -43,9 +44,11 @@ typedef struct {
 	mqd_t qin;
 	mqd_t qout;
 	sys_tag_t qout_tag;
+	bool force[NCHANS];
 	unsigned char cfg[NCHANS];
 	hk_pad_t *trig[NCHANS];
 	hk_pad_t *out[NCHANS];
+	hk_pad_t *trig_all;
         int period;
         int mean;
 	sys_tag_t period_tag;
@@ -166,7 +169,8 @@ static int qout_recv(ctx_t *ctx, int fd)
 		msg_t *msg = (msg_t *) mbuf;
 		if (msg->chan < NCHANS) {
                         hk_pad_t *out = ctx->out[msg->chan];
-                        if (msg->value != out->state) {
+                        if ((ctx->force[msg->chan]) || (msg->value != out->state)) {
+                                ctx->force[msg->chan] = false;
                                 out->state = msg->value;
                                 hk_pad_update_int(out, msg->value);
                         }
@@ -215,8 +219,10 @@ static int create_queue(ctx_t *ctx, char *name, int flags)
 }
 
 
-static int trigger(ctx_t *ctx, unsigned int chan)
+static int trigger(ctx_t *ctx, unsigned int chan, bool force)
 {
+        ctx->force[chan] = force;
+
 	if (mq_send(ctx->qin, (char *) &chan, sizeof(chan), 0) < 0) {
 		log_str("PANIC: %sCannot write input queue: %s", ctx->hdr, strerror(errno));
                 return 0;
@@ -226,19 +232,25 @@ static int trigger(ctx_t *ctx, unsigned int chan)
 }
 
 
-static int trigger_all(ctx_t *ctx)
+static int trigger_all(ctx_t *ctx, bool force)
 {
         int chan;
 
         for (chan = 0; chan < NCHANS; chan++) {
                 if (ctx->trig[chan] != NULL) {
-                        if (!trigger(ctx, chan)) {
+                        if (!trigger(ctx, chan, force)) {
                                 return 0;
                         }
                 }
         }
 
 	return 1;
+}
+
+
+static int trigger_periodic(ctx_t *ctx)
+{
+        return trigger_all(ctx, false);
 }
 
 
@@ -309,11 +321,14 @@ static int _new(hk_obj_t *obj)
 
 			snprintf(buf, sizeof(buf), "out%u", chan);
 			ctx->out[chan] = hk_pad_create(obj, HK_PAD_IN, buf);
-			ctx->out[chan]->state = 0x7FFFFFFF; // Unrealistic value to ensure value will be updated at first trigger
+			ctx->out[chan]->state = 0;
+                        ctx->force[chan] = true; // Force value refresh
 		}
 
 		str = end;
 	}
+
+        ctx->trig_all = hk_pad_create(obj, HK_PAD_IN, "trig");
 
 	/* Open SPI device name */
 	if (spidev_open(&ctx->spidev, ctx->hdr, id) < 0) {
@@ -377,10 +392,10 @@ static void _start(hk_obj_t *obj)
 {
 	ctx_t *ctx = obj->ctx;
 
-        trigger_all(ctx);
+        trigger_all(ctx, true);
 
         if (ctx->period > 0) {
-		ctx->period_tag = sys_timeout(ctx->period, (sys_func_t) trigger_all, ctx);
+		ctx->period_tag = sys_timeout(ctx->period, (sys_func_t) trigger_periodic, ctx);
         }
 }
 
@@ -391,7 +406,12 @@ static void _input(hk_pad_t *pad, char *value)
 
 	/* Ignore falling edge */
 	if (value[0] != '0') {
-                trigger(ctx, pad->state);
+                if (pad == ctx->trig_all) {
+                        trigger_all(ctx, true);
+                }
+                else {
+                        trigger(ctx, pad->state, true);
+                }
 	}
 }
 
