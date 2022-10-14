@@ -35,6 +35,7 @@
 #define NCHANS 8
 #define MSG_MAXSIZE 16
 
+#define DEFAULT_SCALE (3300.0/1024.0)
 
 typedef struct {
 	hk_obj_t *obj;
@@ -52,6 +53,7 @@ typedef struct {
         int period;
         int mean;
 	sys_tag_t period_tag;
+        float scale[NCHANS];
 } ctx_t;
 
 
@@ -77,8 +79,8 @@ static int read_value(ctx_t *ctx, unsigned char cfg)
 
 	size = spidev_write_read(&ctx->spidev, buf, sizeof(buf));
 	if (size == sizeof(buf)) {
-		log_debug(2, "%sSPI read %02X %02X %02X", ctx->hdr, buf[0], buf[1], buf[2]);
 		value = (((unsigned int) (buf[1] & 0x03)) << 8) | buf[2];
+		log_debug(2, "%sSPI read %02X %02X %02X => %d", ctx->hdr, buf[0], buf[1], buf[2], value);
 	}
 
 	return value;
@@ -172,7 +174,8 @@ static int qout_recv(ctx_t *ctx, int fd)
                         if ((ctx->force[msg->chan]) || (msg->value != out->state)) {
                                 ctx->force[msg->chan] = false;
                                 out->state = msg->value;
-                                hk_pad_update_int(out, msg->value);
+                                int voltage = ctx->scale[msg->chan] * msg->value;
+                                hk_pad_update_int(out, voltage);
                         }
 		}
 		else {
@@ -323,12 +326,35 @@ static int _new(hk_obj_t *obj)
 			ctx->out[chan] = hk_pad_create(obj, HK_PAD_IN, buf);
 			ctx->out[chan]->state = 0;
                         ctx->force[chan] = true; // Force value refresh
+                        ctx->scale[chan] = DEFAULT_SCALE;
 		}
 
 		str = end;
 	}
 
+        /* Create global trigger input */
         ctx->trig_all = hk_pad_create(obj, HK_PAD_IN, "trig");
+
+	/* Get list of scale factors */
+        int chan = 0;
+	str = hk_prop_get(&obj->props, "scale");
+	while ((str != NULL) && (chan < NCHANS)) {
+		char *end = strchr(str, ',');
+		if (end != NULL) {
+			*(end++) = '\0';
+		}
+
+                while ((*str != '\0') && (*str <= ' ')) {
+                        str++;
+                }
+
+                if (*str != '\0') {
+                        ctx->scale[chan] = atof(str);
+                }
+
+                chan++;
+                str = end;
+	}
 
 	/* Open SPI device name */
 	if (spidev_open(&ctx->spidev, ctx->hdr, id) < 0) {
