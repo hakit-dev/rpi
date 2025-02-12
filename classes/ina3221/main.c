@@ -153,6 +153,10 @@ static int _new(hk_obj_t *obj)
         str =  hk_prop_get(&obj->props, "rshunt");
         if (str != NULL) {
                 ctx->rshunt = atof(str);
+                if (ctx->rshunt <= 0) {
+                        log_str("%sERROR: Illegal Rshunt value: %.03f", ctx->hdr, ctx->rshunt);
+                        goto failed;
+                }
         }
         log_str("%sRshunt = %.03f ohms", ctx->hdr, ctx->rshunt);
 
@@ -231,7 +235,7 @@ static int input_trig(ctx_t *ctx, bool refresh)
                 }
 
                 if (hk_pad_is_connected(ctx->current[ch])) {
-                        int current = (ina3221_read_current(ctx, ch) * 200) / ctx->rshunt;
+                        int current = ina3221_read_current(ctx, ch) / (200 * ctx->rshunt);
                         if (refresh || (current != ctx->current[ch]->state)) {
                                 ctx->current[ch]->state = current;
                                 hk_pad_update_int(ctx->current[ch], current);
