@@ -1,8 +1,8 @@
 /*
  * HAKit - The Home Automation KIT
- * Copyright (C) 2021 Sylvain Giroudon
+ * Copyright (C) 2025 Sylvain Giroudon
  *
- * INA219 current sensor on Raspberry Pi
+ * INA3221 current sensor on Raspberry Pi
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -107,6 +107,18 @@ static int ina3221_read_current(ctx_t *ctx, int ch)
 }
 
 
+static void ina3221_set_current_limit(ctx_t *ctx, char *prop_name, uint8_t reg)
+{
+        char *svalue =  hk_prop_get(&ctx->obj->props, prop_name);
+        if (svalue != NULL) {
+                uint16_t current = strtoul(svalue, NULL, 0);
+                uint16_t value = ((uint16_t) (current * 200 * ctx->rshunt)) & 0xFFF8;
+                log_str("%sSet %s limit to %u mA (0x%04X)", ctx->hdr, prop_name, current, value);
+                ina3221_write_u16(&ctx->i2cdev, reg, value);
+        }
+}
+
+
 static int _new(hk_obj_t *obj)
 {
         char *str;
@@ -197,10 +209,18 @@ static int _new(hk_obj_t *obj)
         int ch;
         for (ch = 0; ch < INA3221_NUM_CHANNELS; ch++) {
                 char str[16];
+
                 snprintf(str, sizeof(str), "current%d", ch+1);
                 ctx->current[ch] = hk_pad_create(obj, HK_PAD_OUT, str);
+
                 snprintf(str, sizeof(str), "voltage%d", ch+1);
                 ctx->voltage[ch] = hk_pad_create(obj, HK_PAD_OUT, str);
+
+                snprintf(str, sizeof(str), "crit%d", ch+1);
+                ina3221_set_current_limit(ctx, str, INA3221_REG_CRIT1+(2*ch));
+
+                snprintf(str, sizeof(str), "warn%d", ch+1);
+                ina3221_set_current_limit(ctx, str, INA3221_REG_WARN1+(2*ch));
         }
 
 	return 0;
