@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Enable SPI in boot configuration
 BOOT_CONFIG=/boot/config.txt
