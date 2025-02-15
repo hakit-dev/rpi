@@ -4,6 +4,8 @@ PKGNAME := hakit-rpi-$(NAME)
 ARCH ?= $(shell arch)
 OUTDIR = device/$(ARCH)
 
+TARGET ?= rpi
+
 include ../../../hakit/defs.mk
 
 SRCS = main.c spidev.c

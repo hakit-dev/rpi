@@ -171,11 +171,11 @@ static int qout_recv(ctx_t *ctx, int fd)
 		msg_t *msg = (msg_t *) mbuf;
 		if (msg->chan < NCHANS) {
                         hk_pad_t *out = ctx->out[msg->chan];
-                        if ((ctx->force[msg->chan]) || (msg->value != out->state)) {
+                        int value = ctx->scale[msg->chan] * msg->value;
+                        if ((ctx->force[msg->chan]) || (value != out->state)) {
                                 ctx->force[msg->chan] = false;
-                                out->state = msg->value;
-                                int voltage = ctx->scale[msg->chan] * msg->value;
-                                hk_pad_update_int(out, voltage);
+                                out->state = value;
+                                hk_pad_update_int(out, value);
                         }
 		}
 		else {
