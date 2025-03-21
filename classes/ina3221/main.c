@@ -37,7 +37,7 @@ typedef struct {
 	hk_pad_t *voltage[INA3221_NUM_CHANNELS];
         int period;
 	sys_tag_t period_tag;
-        float rshunt;
+        float rshunt[INA3221_NUM_CHANNELS];
 } ctx_t;
 
 
@@ -107,21 +107,21 @@ static int ina3221_read_current(ctx_t *ctx, int ch)
 }
 
 
-static void ina3221_set_current_limit(ctx_t *ctx, char *prop_name, uint8_t reg)
+static void ina3221_set_current_limit(ctx_t *ctx, int ch, char *prop_name, uint8_t reg)
 {
         char *svalue =  hk_prop_get(&ctx->obj->props, prop_name);
         if (svalue != NULL) {
                 uint16_t current = strtoul(svalue, NULL, 0);
-                uint16_t value = ((uint16_t) (current * 200 * ctx->rshunt)) & 0xFFF8;
+                uint16_t value = ((uint16_t) (current * 200 * ctx->rshunt[ch])) & 0xFFF8;
                 log_str("%sSet %s limit to %u mA (0x%04X)", ctx->hdr, prop_name, current, value);
-                ina3221_write_u16(&ctx->i2cdev, reg, value);
+                ina3221_write_u16(&ctx->i2cdev, reg+(2*ch), value);
         }
 }
 
 
 static int _new(hk_obj_t *obj)
 {
-        char *str;
+        int ch;
 
 	/* Alloc object context */
 	ctx_t *ctx = malloc(sizeof(ctx_t));
@@ -147,9 +147,9 @@ static int _new(hk_obj_t *obj)
 
 	/* Get I2C address property */
         unsigned int addr = INA3221_I2C_MIN_ADDR;
-        str =  hk_prop_get(&obj->props, "addr");
-        if (str != NULL) {
-                addr = strtoul(str, NULL, 0);
+        char *saddr =  hk_prop_get(&obj->props, "addr");
+        if (saddr != NULL) {
+                addr = strtoul(saddr, NULL, 0);
                 if ((addr < INA3221_I2C_MIN_ADDR) || (addr > INA3221_I2C_MAX_ADDR)) {
                         log_str("%sERROR: Wrong I2C address 0x%02X", ctx->hdr, addr);
                         goto failed;
@@ -161,16 +161,21 @@ static int _new(hk_obj_t *obj)
 	ctx->period = hk_prop_get_int(&obj->props, "period");
 
         /* Get Rshunt property in ohms */
-        ctx->rshunt = 0.1;
-        str =  hk_prop_get(&obj->props, "rshunt");
-        if (str != NULL) {
-                ctx->rshunt = atof(str);
-                if (ctx->rshunt <= 0) {
-                        log_str("%sERROR: Illegal Rshunt value: %.03f", ctx->hdr, ctx->rshunt);
-                        goto failed;
+        for (ch = 0; ch < INA3221_NUM_CHANNELS; ch++) {
+                ctx->rshunt[ch] = 0.1;
+
+                char str[16];
+                snprintf(str, sizeof(str), "rshunt%d", ch+1);
+                char *svalue =  hk_prop_get(&obj->props, str);
+                if (svalue != NULL) {
+                        ctx->rshunt[ch] = atof(svalue);
+                        if (ctx->rshunt <= 0) {
+                                log_str("%sERROR: Illegal Rshunt value: %.03f", ctx->hdr, ctx->rshunt[ch]);
+                                goto failed;
+                        }
                 }
+                log_str("%sRshunt%d = %.03f ohms", ctx->hdr, ch+1, ctx->rshunt[ch]);
         }
-        log_str("%sRshunt = %.03f ohms", ctx->hdr, ctx->rshunt);
 
 	/* Open I2C device */
 	if (i2cdev_open(&ctx->i2cdev, bus, addr) < 0) {
@@ -206,7 +211,6 @@ static int _new(hk_obj_t *obj)
 
 	/* Create pads */
         ctx->trig = hk_pad_create(obj, HK_PAD_IN, "trig");
-        int ch;
         for (ch = 0; ch < INA3221_NUM_CHANNELS; ch++) {
                 char str[16];
 
@@ -217,10 +221,10 @@ static int _new(hk_obj_t *obj)
                 ctx->voltage[ch] = hk_pad_create(obj, HK_PAD_OUT, str);
 
                 snprintf(str, sizeof(str), "crit%d", ch+1);
-                ina3221_set_current_limit(ctx, str, INA3221_REG_CRIT1+(2*ch));
+                ina3221_set_current_limit(ctx, ch, str, INA3221_REG_CRIT1);
 
                 snprintf(str, sizeof(str), "warn%d", ch+1);
-                ina3221_set_current_limit(ctx, str, INA3221_REG_WARN1+(2*ch));
+                ina3221_set_current_limit(ctx, ch, str, INA3221_REG_WARN1);
         }
 
 	return 0;
@@ -255,7 +259,7 @@ static int input_trig(ctx_t *ctx, bool refresh)
                 }
 
                 if (hk_pad_is_connected(ctx->current[ch])) {
-                        int current = ina3221_read_current(ctx, ch) / (200 * ctx->rshunt);
+                        int current = ina3221_read_current(ctx, ch) / (200 * ctx->rshunt[ch]);
                         if (refresh || (current != ctx->current[ch]->state)) {
                                 ctx->current[ch]->state = current;
                                 hk_pad_update_int(ctx->current[ch], current);
